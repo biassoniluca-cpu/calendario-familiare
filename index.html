@@ -188,6 +188,7 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 .sw[aria-pressed="true"]{border-color:var(--ink)}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:12px;font-weight:600;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%}
 .toast.show{opacity:1}
+.ver{position:fixed;left:10px;bottom:calc(6px + env(safe-area-inset-bottom,0px));z-index:25;font-size:.78rem;font-weight:600;color:var(--muted);pointer-events:none}
 .login{margin:8vh auto 0}
 .pwwrap{position:relative}.pwwrap .input{padding-right:48px}
 .pweye{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:44px;height:44px;border:0;background:transparent;color:var(--muted);display:grid;place-items:center}
@@ -225,6 +226,8 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 <div class="toast" id="toast" role="status"></div>
+<!-- VERSIONE: a ogni modifica aumentala insieme a CACHE in sw.js (stesso numero) -->
+<div class="ver" aria-hidden="true">v4</div>
 
 <script>
 (function(){

@@ -28,6 +28,7 @@ Manda a tutti l'indirizzo e la password. Sul telefono:
 
 ## Note
 - Per cambiare password: modifica `impostaPassword`, eseguila di nuovo. Tutti dovranno reinserirla.
+- Numero di versione: è in basso a sinistra in ogni schermata. A ogni modifica dell'app aumentalo in `index.html` (riga `class="ver"`) e usa lo stesso numero in `CACHE` dentro `sw.js`.
 - Se modifichi `apps-script/Code.gs`: Esegui il deployment → Gestisci deployment → modifica → Nuova versione (così l'URL resta lo stesso).
 - I dati sono leggibili nel foglio (schede "Persone" e "Impegni"): non modificare a mano la colonna "dati".
 - Le modifiche degli altri compaiono entro ~30 secondi, o subito riaprendo l'app.

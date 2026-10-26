@@ -151,6 +151,11 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 .fabbar{position:fixed;left:0;right:0;bottom:0;padding:0 18px calc(18px + env(safe-area-inset-bottom,0px));display:flex;justify-content:flex-end;pointer-events:none;z-index:6}
 .fab{pointer-events:auto;border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:1rem;height:56px;padding:0 22px;border-radius:18px;box-shadow:var(--shadow);display:flex;align-items:center;gap:8px}
 .fab span{font-size:1.5rem;line-height:1;font-weight:500}
+.fabbar{gap:10px}
+.fab.mic{width:56px;padding:0;justify-content:center}
+.fab.mic svg{pointer-events:none}
+.fab.mic.on{background:var(--danger,#C62828);animation:micpulse 1s ease-in-out infinite}
+@keyframes micpulse{50%{transform:scale(1.08)}}
 
 /* Sheet */
 .scrim{position:fixed;inset:0;background:rgba(10,16,22,.45);z-index:20;display:none}
@@ -222,12 +227,12 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 
 <main id="main"><p class="hint">Caricamento…</p></main>
 
-<div class="fabbar"><button class="fab" id="fab"><span>+</span> Nuovo impegno</button></div>
+<div class="fabbar"><button class="fab mic" id="mic" aria-label="Nuovo impegno a voce" hidden><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button><button class="fab" id="fab"><span>+</span> Nuovo impegno</button></div>
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 <div class="toast" id="toast" role="status"></div>
 <!-- VERSIONE: a ogni modifica aumentala insieme a CACHE in sw.js (stesso numero) -->
-<div class="ver" aria-hidden="true">v5</div>
+<div class="ver" aria-hidden="true">v6</div>
 
 <script>
 (function(){
@@ -358,6 +363,109 @@ function delDoc(coll, id){
   enqueue({action:'delete', coll, id}).catch(writeFail);
 }
 
+/* ---------- nuovo impegno a voce ---------- */
+// Es. "inserisci per Chiara visita oculistica al 16 novembre 2026 alle 15"
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const MESI = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+const GIORNI = ['domenica','luned[iì]','marted[iì]','mercoled[iì]','gioved[iì]','venerd[iì]','sabato'];
+const TYPE_WORDS = [
+  ['salute', /visit|medic|dottor|dentist|oculist|pediatr|analisi|vaccin|prelievo|ospedal|fisioterap|ortodont/i],
+  ['partita', /partita|torneo|\bgara\b/i],
+  ['allenamento', /allenament|palestra|piscina|nuoto|danza/i],
+  ['scuola', /scuola|colloqui|recita|compit|verifica|interrogazion/i],
+  ['scadenza', /scadenz|pagare|pagamento|bollett|\bbollo\b|rinnov|\btass[ae]\b|assicurazion/i]
+];
+const reEsc = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const TM = '(\\d{1,2}|una)(?:[:.](\\d{2})|\\s+e\\s+(mezza|mezzo|un quarto|tre quarti|\\d{1,2}))?(?:\\s+(?:del|di|della)\\s+(mattina|mattino|pomeriggio|sera|notte))?';
+function spokenMin(h, mm, extra, qual){
+  h = h === 'una' ? 1 : +h;
+  let m = mm ? +mm : extra ? ({mezza:30, mezzo:30, 'un quarto':15, 'tre quarti':45}[extra] ?? +extra) : 0;
+  if(qual ? /pomeriggio|sera/.test(qual) && h < 12 : h >= 1 && h <= 6) h += 12;
+  return Math.min(h*60 + Math.min(m,59), 23*60+59);
+}
+const minHM = m => `${pad(Math.floor(m/60))}:${pad(m%60)}`;
+function validDate(y, mo, d){ const x = new Date(y, mo, d); return x.getMonth() === mo && x.getDate() === d ? x : null; }
+
+function parseSpoken(text){
+  let t = ' ' + String(text).replace(/[,;]/g, ' ').replace(/\s+/g, ' ') + ' ';
+  const cut = re => { let m = null; t = t.replace(re, (...a) => { m = a; return ' '; }); return m; };
+  const out = {}, now = today();
+  cut(/^\s*(?:inserisci|aggiungi|metti|segna|crea|ricordami(?: di)?|nuovo)(?:\s+(?:un|una|l'|il)?\s*(?:impegno|appuntamento|evento))?\s/i);
+  if(cut(/\s(?:per\s)?tutt[oa] (?:il giorno|la giornata)\s/i)) out.allDay = true;
+  // ora
+  let m;
+  if((m = cut(new RegExp(`\\s(?:dalle|dall')\\s*(?:ore\\s+)?${TM}\\s+(?:alle|fino alle)\\s+(?:ore\\s+)?${TM}\\s`, 'i')))){
+    out.start = spokenMin(m[1],m[2],m[3],m[4]); out.end = spokenMin(m[5],m[6],m[7],m[8] || m[4]);
+  } else if((m = cut(new RegExp(`\\s(?:alle|all'|ore|alle ore|verso le|per le)\\s*${TM}\\s`, 'i')))){
+    out.start = spokenMin(m[1],m[2],m[3],m[4]);
+  } else if(cut(/\s(?:a\s)?mezzogiorno\s/i)) out.start = 12*60;
+  // giorno
+  const pre = '(?:(?:il|al|per il|per|del|di|giorno|entro il)\\s+)?(?:(?:' + GIORNI.join('|') + ')\\s+)?';
+  let date = null;
+  if((m = cut(new RegExp(`\\s${pre}(\\d{1,2}|primo)(?:°|º)?\\s+(${MESI.join('|')})(?:\\s+(?:del\\s+)?(\\d{4}))?\\s`, 'i')))){
+    const d = m[1].toLowerCase() === 'primo' ? 1 : +m[1], mo = MESI.indexOf(m[2].toLowerCase());
+    date = validDate(m[3] ? +m[3] : now.getFullYear(), mo, d);
+    if(date && !m[3] && date < now) date = validDate(now.getFullYear()+1, mo, d);
+  } else if((m = cut(new RegExp(`\\s${pre}(\\d{1,2})[/.-](\\d{1,2})(?:[/.-](\\d{2,4}))?\\s`)))){
+    let y = m[3] ? +m[3] : now.getFullYear(); if(y < 100) y += 2000;
+    date = validDate(y, +m[2]-1, +m[1]);
+    if(date && !m[3] && date < now) date = validDate(y+1, +m[2]-1, +m[1]);
+  } else if((m = cut(/\s(?:per\s)?(oggi|stasera|domani|dopodomani)\s/i))){
+    date = new Date(now); date.setDate(date.getDate() + ({oggi:0, stasera:0, domani:1, dopodomani:2}[m[1].toLowerCase()]));
+  } else if((m = cut(new RegExp(`\\s(?:(?:il|di|per|questo|questa|prossimo)\\s+)?(${GIORNI.join('|')})(?:\\s+prossim[oa])?\\s`, 'i')))){
+    const wd = GIORNI.findIndex(g => new RegExp(`^${g}$`, 'i').test(m[1]));
+    date = new Date(now); date.setDate(date.getDate() + ((wd - now.getDay() + 6) % 7) + 1);
+  } else if((m = cut(/\s(?:il|al|per il)\s+(\d{1,2})\s/i))){
+    date = validDate(now.getFullYear(), now.getMonth(), +m[1]);
+    if(date && date < now) date = validDate(now.getFullYear(), now.getMonth()+1, +m[1]);
+  }
+  if(date) out.date = iso(date);
+  // chi
+  if(cut(/\s(?:per\s)?(?:tutti|tutta la famiglia)\s/i)) out.who = [];
+  else {
+    const who = [];
+    [...S.people].sort((a,b) => b.name.length - a.name.length).forEach(p => {
+      const re = new RegExp(`\\s(?:(?:per|con|a|di|e)\\s+)?${reEsc(p.name.trim())}(?=\\s)`, 'i');
+      if(p.name.trim() && cut(re)) who.push(p.id);
+    });
+    if(who.length) out.who = who;
+  }
+  // cosa: quello che resta
+  let title = t.replace(/\s+/g, ' ').trim(), prev;
+  do {
+    prev = title;
+    title = title.replace(/^(?:per|con|a|al|alla|allo|il|lo|la|di|del|della|e|ed|che|ore|alle)\s+/i, '')
+                 .replace(/\s+(?:per|con|a|al|alla|il|lo|la|di|del|della|e|ed|alle|ore|il giorno)$/i, '').replace(/[.\s]+$/, '');
+  } while(title !== prev);
+  out.title = (title.charAt(0).toUpperCase() + title.slice(1)).slice(0, 80);
+  const tp = TYPE_WORDS.find(([, re]) => re.test(text)); if(tp) out.type = tp[0];
+  if(out.start != null){ const e = out.end != null && out.end > out.start ? out.end : Math.min(out.start + 60, 23*60+59); out.start = minHM(out.start); out.end = minHM(e); }
+  else delete out.end;
+  return out;
+}
+
+let listening = null;
+function voiceStart(){
+  if(listening){ listening.stop(); return; }
+  const rec = new SR(); listening = rec;
+  rec.lang = 'it-IT'; rec.interimResults = false; rec.maxAlternatives = 1;
+  const btn = $('#mic'); btn.classList.add('on'); btn.setAttribute('aria-label', 'Sto ascoltando: tocca per fermare');
+  toast('Ti ascolto… es. “Chiara visita oculistica il 16 novembre alle 15”');
+  rec.onresult = e => {
+    const said = e.results[0][0].transcript;
+    openEditor(null, null, parseSpoken(said));
+    toast(`Ho capito: “${said}”. Controlla e tocca Aggiungi.`);
+  };
+  rec.onerror = e => {
+    if(e.error === 'aborted') return;
+    toast(e.error === 'not-allowed' || e.error === 'service-not-allowed' ? 'Consenti l’uso del microfono al browser per dettare gli impegni.'
+        : e.error === 'no-speech' ? 'Non ho sentito nulla: riprova.' : e.error === 'network' ? 'Serve la connessione per il riconoscimento vocale.'
+        : 'Non sono riuscito ad ascoltare: riprova.');
+  };
+  rec.onend = () => { listening = null; btn.classList.remove('on'); btn.setAttribute('aria-label', 'Nuovo impegno a voce'); };
+  try{ rec.start(); }catch(err){ rec.onend(); }
+}
+
 /* ---------- recurrence ---------- */
 function occursOn(ev, d, ds){
   if(!ev.date || ds < ev.date) return false;
@@ -442,6 +550,7 @@ function render(){
   document.querySelectorAll('.views button').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === S.view));
   const ready = S.mode === 'online' || S.mode === 'offline';
   $('#fab').style.display = ready ? '' : 'none';
+  $('#mic').hidden = !(ready && SR && S.canWrite);
   $('header .bar').style.display = (S.mode === 'login' || S.mode === 'config') ? 'none' : '';
   renderFilter(); setPeriod();
   const m = $('#main');
@@ -530,18 +639,18 @@ function viewPeople(){
 
 /* ---------- sheet ---------- */
 let draft = null, draftOcc = null, sheetKind = null, saving = false;
-function openSheet(kind){ sheetKind = kind; $('#scrim').classList.add('open'); $('#sheet').classList.add('open'); setTimeout(()=>{ const f = $('#sheet [data-autofocus]'); if(f && kind==='event' && !draft.id) f.focus(); }, 60); }
+function openSheet(kind){ sheetKind = kind; $('#scrim').classList.add('open'); $('#sheet').classList.add('open'); setTimeout(()=>{ const f = $('#sheet [data-autofocus]'); if(f && kind==='event' && !draft.id && !draft.title) f.focus(); }, 60); }
 function closeSheet(){ $('#scrim').classList.remove('open'); $('#sheet').classList.remove('open'); sheetKind = null; draft = null; }
 function refreshSheet(){ if(sheetKind === 'people') renderPeopleSheet(); }
 
-function openEditor(id, occ){
+function openEditor(id, occ, pre){
   const base = id ? S.events.find(e=>e.id===id) : null;
   if(id && !base) return;
   const d = occ || iso(S.view==='mese' ? S.selDay : today());
-  draft = base ? JSON.parse(JSON.stringify(base)) : {
+  draft = base ? JSON.parse(JSON.stringify(base)) : Object.assign({
     id:null, title:'', type:'altro', who: S.filter.size===1 ? [...S.filter] : [], date:d, allDay:false,
     start:'17:00', end:'18:00', rep:{freq:'none', days:[], interval:1, until:''}, skip:[], place:'', notes:''
-  };
+  }, pre || {});
   draft.rep = Object.assign({freq:'none',days:[],interval:1,until:''}, draft.rep||{});
   draftOcc = occ || draft.date;
   renderEditor(); openSheet('event');
@@ -663,6 +772,7 @@ $('#prev').onclick = () => shift(-1);
 $('#next').onclick = () => shift(1);
 $('#todayBtn').onclick = () => { S.anchor = today(); S.selDay = today(); render(); };
 $('#fab').onclick = () => openEditor(null, null);
+$('#mic').onclick = voiceStart;
 $('#btnPeople').onclick = () => { renderPeopleSheet(); openSheet('people'); };
 $('#scrim').onclick = closeSheet;
 document.addEventListener('keydown', e => { if(e.key === 'Escape' && sheetKind) closeSheet(); });

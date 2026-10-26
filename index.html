@@ -227,7 +227,7 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 <div class="toast" id="toast" role="status"></div>
 <!-- VERSIONE: a ogni modifica aumentala insieme a CACHE in sw.js (stesso numero) -->
-<div class="ver" aria-hidden="true">v4</div>
+<div class="ver" aria-hidden="true">v5</div>
 
 <script>
 (function(){
@@ -272,8 +272,11 @@ const store = { pw:'' };
 let queue = Promise.resolve(), pending = 0, polling = false;
 
 async function api(payload){
-  const r = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({...payload, password: store.pw}) });
-  const j = await r.json();
+  let j;
+  try{
+    const r = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({...payload, password: store.pw}) });
+    j = await r.json();
+  }catch(err){ const e = new Error('unreachable'); e.code = navigator.onLine === false ? 'offline' : 'unreachable'; throw e; }
   if(!j.ok){ const e = new Error(j.error||'errore'); e.code = j.error; throw e; }
   return j;
 }
@@ -316,7 +319,12 @@ async function login(pw){
     applyData(j); S.mode = 'online'; render(); startPolling();
   }catch(e){
     store.pw = ''; S.mode = 'login';
-    S.loginError = e.code === 'wrong_password' ? 'Password non corretta.' : 'Non riesco a collegarmi al calendario. Controlla la connessione e riprova.';
+    S.loginError = ({
+      wrong_password: 'Password non corretta.',
+      offline: 'Il telefono è senza connessione. Collegati e riprova.',
+      no_password: 'Sul server non è ancora impostata la password: in Apps Script esegui la funzione impostaPassword.',
+      unreachable: 'Lo script Google non risponde correttamente: controlla che il deployment sia accessibile a “Chiunque” e che sia l’ultima versione.'
+    })[e.code] || `Errore dello script Google (${e.code || 'sconosciuto'}). Riprova tra poco.`;
     render();
   }
 }

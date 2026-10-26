@@ -5,7 +5,7 @@ Serve farlo una volta sola (circa 15 minuti), poi i familiari usano solo link + 
 
 ## 1. Il foglio e lo script (backend)
 1. Crea un nuovo Foglio Google, ad esempio "Calendario famiglia".
-2. Menu **Estensioni → Apps Script**. Cancella il contenuto e incolla tutto `Code.gs`.
+2. Menu **Estensioni → Apps Script**. Cancella il contenuto e incolla tutto `apps-script/Code.gs`.
 3. Nella funzione `impostaPassword` sostituisci `cambiami` con la password di famiglia.
 4. In alto scegli la funzione `impostaPassword` e premi **Esegui**. Autorizza l'accesso con il tuo account Google
    (se compare "App non verificata": Avanzate → Vai al progetto).
@@ -28,6 +28,6 @@ Manda a tutti l'indirizzo e la password. Sul telefono:
 
 ## Note
 - Per cambiare password: modifica `impostaPassword`, eseguila di nuovo. Tutti dovranno reinserirla.
-- Se modifichi `Code.gs`: Esegui il deployment → Gestisci deployment → modifica → Nuova versione (così l'URL resta lo stesso).
+- Se modifichi `apps-script/Code.gs`: Esegui il deployment → Gestisci deployment → modifica → Nuova versione (così l'URL resta lo stesso).
 - I dati sono leggibili nel foglio (schede "Persone" e "Impegni"): non modificare a mano la colonna "dati".
 - Le modifiche degli altri compaiono entro ~30 secondi, o subito riaprendo l'app.

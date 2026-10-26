@@ -189,6 +189,9 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:12px;font-weight:600;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%}
 .toast.show{opacity:1}
 .login{margin:8vh auto 0}
+.pwwrap{position:relative}.pwwrap .input{padding-right:48px}
+.pweye{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:44px;height:44px;border:0;background:transparent;color:var(--muted);display:grid;place-items:center}
+.pweye svg{pointer-events:none}.pweye[aria-pressed="true"] .slash{display:none}
 .err{color:#C0392B;font-weight:600}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 </style>
@@ -435,7 +438,8 @@ function render(){
   if(S.mode === 'config'){ m.innerHTML = `<section class="empty"><h2>Manca un passaggio</h2><p>Apri il file index.html e incolla l’indirizzo dello script Google nella riga API_URL. Trovi le istruzioni nel file LEGGIMI.</p></section>`; return; }
   if(S.mode === 'login'){
     m.innerHTML = `<section class="empty login"><h2>Calendario di famiglia</h2><p>Inserisci la password di famiglia. Su questo dispositivo te la chiederà una volta sola.</p>
-      <input class="input" id="loginPw" type="password" autocomplete="current-password" placeholder="Password">
+      <div class="pwwrap"><input class="input" id="loginPw" type="password" autocomplete="current-password" placeholder="Password">
+      <button type="button" class="pweye" id="pwToggle" aria-label="Mostra password" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M4 4l16 16"/></svg></button></div>
       ${S.loginError ? `<p class="err">${esc(S.loginError)}</p>` : ''}
       <button class="primary" id="loginBtn">Entra</button></section>`;
     setTimeout(()=>$('#loginPw')?.focus(), 30); return;
@@ -664,6 +668,7 @@ $('#main').addEventListener('click', e => {
   const day = e.target.closest('[data-day]'); if(day){ S.selDay = parse(day.dataset.day); render(); const p = document.querySelector('.daypanel'); if(p && window.innerWidth<700) p.scrollIntoView({behavior:'smooth', block:'nearest'}); return; }
   if(e.target.id === 'quickPersonAdd'){ const i = $('#quickPerson'); addPerson(i.value); }
   if(e.target.id === 'loginBtn'){ login($('#loginPw').value); }
+  if(e.target.id === 'pwToggle'){ const i = $('#loginPw'), show = i.type === 'password'; i.type = show ? 'text' : 'password'; e.target.setAttribute('aria-pressed', show); e.target.setAttribute('aria-label', show ? 'Nascondi password' : 'Mostra password'); i.focus(); }
   if(e.target.id === 'retryBtn'){ sync(); }
 });
 $('#main').addEventListener('keydown', e => {

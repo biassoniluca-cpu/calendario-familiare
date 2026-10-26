@@ -19,7 +19,7 @@ Serve farlo una volta sola (circa 15 minuti), poi i familiari usano solo link + 
 2. Crea un account su github.com (se non ce l'hai) e un nuovo repository pubblico, es. `calendario`.
 3. **Add file → Upload files**: carica tutti i file della cartella (index.html, sw.js, manifest.webmanifest, icone).
 4. **Settings → Pages**: Source "Deploy from a branch", branch `main`, cartella `/ (root)` → Save.
-5. Dopo un minuto l'app è su `https://TUONOME.github.io/calendario/`.
+5. Dopo un minuto l'app è su `https://biassoniluca-cpu.github.io/calendario-familiare/`.
 
 ## 3. In famiglia
 Manda a tutti l'indirizzo e la password. Sul telefono:

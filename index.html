@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Famiglia">
@@ -176,6 +176,8 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 .switch input{width:20px;height:20px;accent-color:var(--accent)}
 .hint{font-size:.82rem;color:var(--muted)}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+/* Annulla/Aggiungi sempre visibili in fondo alla scheda, anche con la tastiera aperta */
+.sheet-save{position:sticky;bottom:calc(-22px - env(safe-area-inset-bottom,0px));z-index:1;background:var(--surface);margin:6px -18px 0;padding:10px 18px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line)}
 .primary{border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;height:48px;padding:0 22px;border-radius:14px;flex:1}
 .danger{border:1.5px solid #C0392B;color:#C0392B;background:transparent;font-weight:700;height:44px;padding:0 14px;border-radius:12px}
 .secondary{border:1.5px solid var(--line);background:var(--surface);font-weight:600;height:48px;padding:0 18px;border-radius:14px}
@@ -224,7 +226,7 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 <div class="toast" id="toast" role="status"></div>
 <!-- VERSIONE: a ogni modifica aumentala insieme a CACHE in sw.js (stesso numero) -->
-<div class="ver" aria-hidden="true">v7</div>
+<div class="ver" aria-hidden="true">v8</div>
 
 <script>
 (function(){
@@ -561,7 +563,7 @@ function render(){
   if(S.mode === 'offline') html += `<div class="notice">Senza connessione: stai vedendo l’ultima versione scaricata.</div>`;
   if(!S.people.length && S.canWrite){
     html += `<section class="empty"><h2>Chi c’è in famiglia?</h2><p>Aggiungi le persone una alla volta: ognuna avrà il suo colore, così a colpo d’occhio capisci di chi è ogni impegno.</p>
-      <div class="row"><input class="input" id="quickPerson" placeholder="Nome, es. Luca" style="flex:1" maxlength="30"><button class="primary" id="quickPersonAdd" style="flex:0">Aggiungi</button></div></section>`;
+      <div class="row"><input class="input" id="quickPerson" autocomplete="off" placeholder="Nome, es. Luca" style="flex:1" maxlength="30"><button class="primary" id="quickPersonAdd" style="flex:0">Aggiungi</button></div></section>`;
     m.innerHTML = html; return;
   }
   if(S.view === 'settimana') html += viewWeek();
@@ -678,7 +680,7 @@ function renderEditor(){
   const occD = parse(draftOcc);
   $('#sheet').innerHTML = `<div class="grab"></div>
   <h2 id="sheetTitle">${e.id ? (ro?'Impegno':'Modifica impegno') : 'Nuovo impegno'}</h2>
-  <div class="field"><label for="f-title">Cosa</label><input class="input title-input" id="f-title" data-k="title" data-autofocus value="${esc(e.title)}" placeholder="Es. Partita under 12 contro Brera" maxlength="80" ${ro?'disabled':''}></div>
+  <div class="field"><label for="f-title">Cosa</label><input class="input title-input" id="f-title" autocomplete="off" data-k="title" data-autofocus value="${esc(e.title)}" placeholder="Es. Partita under 12 contro Brera" maxlength="80" ${ro?'disabled':''}></div>
   <div class="field"><span class="flabel">Tipo</span><div class="chips">${Object.entries(TYPES).map(([k,t])=>`<button class="tchip" data-type="${k}" aria-pressed="${e.type===k}" ${ro?'disabled':''}>${t.icon} ${t.label}</button>`).join('')}</div></div>
   <div class="field"><span class="flabel">Chi</span><div class="chips">${S.people.map(p=>`<button class="pchip" style="--c:${safeColor(p.color)}" data-who="${esc(p.id)}" aria-pressed="${(e.who||[]).includes(p.id)}" ${ro?'disabled':''}><span class="dot">${initial(p.name)}</span>${esc(p.name)}</button>`).join('')}</div><span class="hint">Se non scegli nessuno, l’impegno vale per tutta la famiglia.</span></div>
   <div class="grid2">
@@ -698,10 +700,10 @@ function renderEditor(){
     </select></div>
   ${e.rep.freq==='weekly' ? `<div class="field"><span class="flabel">Nei giorni</span><div class="chips">${DAYS.map((d,i)=>`<button class="dchip" data-day-toggle="${i}" aria-pressed="${(e.rep.days||[]).includes(i)}" ${ro?'disabled':''}>${d}</button>`).join('')}</div></div>`:''}
   ${recurring ? `<div class="field"><label for="f-until">Fino al (facoltativo)</label><input class="input" type="date" id="f-until" data-rep="until" value="${esc(e.rep.until||'')}" ${ro?'disabled':''}><span class="hint">Es. la fine della stagione sportiva o dell’anno scolastico.</span></div>`:''}
-  <div class="field"><label for="f-place">Dove</label><input class="input" id="f-place" data-k="place" value="${esc(e.place)}" placeholder="Es. Centro sportivo Iseo" maxlength="80" ${ro?'disabled':''}></div>
-  <div class="field"><label for="f-notes">Note</label><textarea class="input" id="f-notes" data-k="notes" rows="2" placeholder="Es. portare la divisa bianca" maxlength="400" ${ro?'disabled':''}>${esc(e.notes)}</textarea></div>
+  <div class="field"><label for="f-place">Dove</label><input class="input" id="f-place" autocomplete="off" data-k="place" value="${esc(e.place)}" placeholder="Es. Centro sportivo Iseo" maxlength="80" ${ro?'disabled':''}></div>
+  <div class="field"><label for="f-notes">Note</label><textarea class="input" id="f-notes" autocomplete="off" data-k="notes" rows="2" placeholder="Es. portare la divisa bianca" maxlength="400" ${ro?'disabled':''}>${esc(e.notes)}</textarea></div>
   ${ro ? `<div class="actions"><button class="secondary" data-close style="flex:1">Chiudi</button></div>` : `
-  <div class="actions"><button class="secondary" data-close>Annulla</button><button class="primary" id="saveEv">${e.id?'Salva modifiche':'Aggiungi al calendario'}</button></div>
+  <div class="actions sheet-save"><button class="secondary" data-close>Annulla</button><button class="primary" id="saveEv">${e.id?'Salva modifiche':'Aggiungi al calendario'}</button></div>
   ${e.id ? `<div class="actions" style="margin-top:14px">${recurring ? `<button class="danger" id="delOne">Elimina solo ${occD.getDate()} ${MONTHS[occD.getMonth()].slice(0,3)}</button><button class="danger" id="delAll">Elimina tutta la serie</button>` : `<button class="danger" id="delAll">Elimina impegno</button>`}</div>`:''}`}`;
 }
 function applyTypePreset(k){
@@ -742,11 +744,11 @@ function renderPeopleSheet(){
   const ro = !S.canWrite;
   $('#sheet').innerHTML = `<div class="grab"></div><h2 id="sheetTitle">Famiglia</h2>
   ${S.people.map(p=>`<div class="prow" data-pid="${esc(p.id)}">
-    <input class="input" data-pname="${esc(p.id)}" value="${esc(p.name)}" maxlength="30" aria-label="Nome" ${ro?'disabled':''}>
+    <input class="input" data-pname="${esc(p.id)}" autocomplete="off" value="${esc(p.name)}" maxlength="30" aria-label="Nome" ${ro?'disabled':''}>
     ${ro?'':`<button class="danger" data-pdel="${esc(p.id)}" aria-label="Rimuovi ${esc(p.name)}">Rimuovi</button>`}
     <div class="swatches">${COLORS.map(c=>`<button class="sw" style="--c:${c}" data-pcolor="${c}" data-for="${esc(p.id)}" aria-label="Colore" aria-pressed="${safeColor(p.color)===c}" ${ro?'disabled':''}></button>`).join('')}</div>
   </div>`).join('') || '<p class="hint">Nessuno ancora.</p>'}
-  ${ro?'':`<div class="row" style="margin-top:14px"><input class="input" id="newPerson" placeholder="Aggiungi una persona" maxlength="30" style="flex:1"><button class="primary" id="addPerson" style="flex:0">Aggiungi</button></div>`}
+  ${ro?'':`<div class="row" style="margin-top:14px"><input class="input" id="newPerson" autocomplete="off" placeholder="Aggiungi una persona" maxlength="30" style="flex:1"><button class="primary" id="addPerson" style="flex:0">Aggiungi</button></div>`}
   <p class="hint" style="margin-top:16px">Per condividere il calendario manda ai familiari l’indirizzo di questa pagina e la password. Sul telefono, dal menu del browser scegli “Installa app” o “Aggiungi a schermata Home”.</p>
   <div class="actions"><button class="secondary" id="logoutBtn">Esci da questo dispositivo</button><button class="secondary" data-close style="flex:1">Fatto</button></div>`;
 }

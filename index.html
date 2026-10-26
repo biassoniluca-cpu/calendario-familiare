@@ -87,23 +87,8 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 .badge.soon{background:#C2410C;color:#fff}
 
 /* Week */
-.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
-.day{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:10px;min-height:160px;display:flex;flex-direction:column;gap:6px}
-.day-head{display:flex;align-items:baseline;gap:6px;margin-bottom:2px}
 .day-num{font-family:var(--display);font-weight:800;font-size:1.6rem;line-height:1;letter-spacing:-.03em}
-.day-name{color:var(--muted);font-weight:600;font-size:.85rem}
-.day.is-today .day-num{background:var(--today);color:var(--today-ink);border-radius:10px;padding:2px 6px}
-.day .add{margin-top:auto;border:1px dashed var(--line);background:transparent;border-radius:10px;padding:6px;color:var(--muted);font-size:.85rem}
-.day .add:hover{border-color:var(--accent);color:var(--ink)}
 .empty-day{color:var(--muted);font-size:.85rem}
-@media (max-width:860px){
-  .week{grid-template-columns:1fr}
-  .day{min-height:0;flex-direction:row;flex-wrap:wrap;align-items:flex-start}
-  .day-head{flex-direction:column;align-items:center;width:52px;gap:2px}
-  .day-list{flex:1;display:grid;gap:6px;min-width:0}
-  .day .add{display:none}
-}
-@media (min-width:861px){ .day-list{display:grid;gap:6px} }
 
 /* Month */
 .month-wrap{overflow-x:auto}
@@ -119,8 +104,14 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 .more{font-size:.74rem;color:var(--muted);font-weight:600}
 .dots{display:none;gap:3px;flex-wrap:wrap}
 .dots i{width:7px;height:7px;border-radius:50%;background:var(--c)}
-.daypanel{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;display:grid;gap:8px}
-.daypanel h3{margin:0;font-family:var(--display);font-size:1.15rem}
+.wgrid .mcell{min-height:0;align-items:center;padding:6px 2px 8px}
+.wgrid .mev,.wgrid .more{display:none}
+.wgrid .dots{display:flex;justify-content:center;min-height:7px}
+.scope{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0 12px}
+.scope h3{margin:0;font-family:var(--display);font-size:1.15rem}
+.scope{scroll-margin-top:200px}
+.scope .pchip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.plist .add-day{justify-self:start}
 @media (max-width:700px){
   .mcell{min-height:58px;align-items:center;padding:4px 2px}
   .mev,.more{display:none}
@@ -138,10 +129,11 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 .amonth{font-family:var(--display);font-weight:700;font-size:1.05rem;color:var(--muted);margin:8px 0 -4px 76px}
 
 /* People */
-.cols{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(260px,1fr);gap:12px;overflow-x:auto;padding-bottom:8px}
-.col{background:var(--surface);border:1px solid var(--line);border-top:6px solid var(--c);border-radius:16px;padding:12px;display:grid;gap:8px;align-content:start}
-.col h3{margin:0;font-family:var(--display);font-size:1.25rem;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
-.col .sub{font-size:.8rem;font-weight:700;color:var(--muted);margin-top:4px}
+.pcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.pcard{background:var(--surface);border:1px solid var(--line);border-top:6px solid var(--c);border-radius:16px;padding:12px;text-align:left;color:var(--ink);display:grid;gap:4px}
+.pcard[aria-pressed="true"]{outline:2.5px solid var(--c);outline-offset:-1px;background:color-mix(in srgb, var(--c) 8%, var(--surface))}
+.pcard b{font-family:var(--display);font-size:1.15rem;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+.pcard small{color:var(--muted);font-weight:600}
 
 .empty{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px;max-width:520px;display:grid;gap:12px}
 .empty h2{margin:0;font-family:var(--display);font-size:1.5rem;letter-spacing:-.02em}
@@ -232,7 +224,7 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 <div class="toast" id="toast" role="status"></div>
 <!-- VERSIONE: a ogni modifica aumentala insieme a CACHE in sw.js (stesso numero) -->
-<div class="ver" aria-hidden="true">v6</div>
+<div class="ver" aria-hidden="true">v7</div>
 
 <script>
 (function(){
@@ -264,7 +256,7 @@ const VIEWS = ['agenda','settimana','mese','persone'];
 
 const S = {
   people:[], events:[], view: VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'settimana',
-  anchor: today(), selDay: today(), filter: new Set(), canWrite: true, mode:'loading', loginError:''
+  anchor: today(), day: null, person: null, filter: new Set(), canWrite: true, mode:'loading', loginError:''
 };
 
 /* ---------- CONFIGURAZIONE ---------- */
@@ -578,36 +570,55 @@ function render(){
   else html += viewPeople();
   m.innerHTML = html;
 }
-function viewWeek(){
-  const s = weekStart(S.anchor), t = iso(today());
-  let h = '<div class="week">';
-  for(let i=0;i<7;i++){
-    const d = addDays(s,i), ds = iso(d), evs = eventsOn(d);
-    h += `<section class="day ${ds===t?'is-today':''}"><div class="day-head"><span class="day-num">${d.getDate()}</span><span class="day-name">${DAYS[i]}</span></div>
-      <div class="day-list">${evs.length ? evs.map(e=>evCard(e,ds)).join('') : '<span class="empty-day">Libero</span>'}</div>
-      ${S.canWrite?`<button class="add" data-add="${ds}">+ aggiungi</button>`:''}</section>`;
+// Quadratino di un giorno (settimana e mese); toccandolo si vedono sotto solo i suoi impegni
+function dayCell(d, out){
+  const ds = iso(d), evs = eventsOn(d);
+  return `<button class="mcell ${out?'out':''} ${ds===iso(today())?'is-today':''} ${ds===S.day?'sel':''}" data-day="${ds}" aria-pressed="${ds===S.day}" aria-label="${d.getDate()} ${MONTHS[d.getMonth()]}, ${evs.length} impegni">
+    <span class="mnum">${d.getDate()}</span>
+    ${evs.slice(0,3).map(e=>`<span class="mev ${e.type==='scadenza'?'is-deadline':''}" style="--c:${evColor(e)}">${e.allDay||!e.start?'':esc(e.start)+' '}${esc(e.title)}</span>`).join('')}
+    ${evs.length>3?`<span class="more">+${evs.length-3} altri</span>`:''}
+    <span class="dots">${evs.slice(0,5).map(e=>`<i style="--c:${evColor(e)}"></i>`).join('')}</span>
+  </button>`;
+}
+// Impegni a cascata, raggruppati per giorno
+function dayGroups(days, evsOf, opts={}){
+  const t = iso(today()); let h = '', lastM = -1, n = 0;
+  for(const d of days){
+    const ds = iso(d), evs = evsOf(d, ds);
+    if(!evs.length) continue; n++;
+    if(opts.months && d.getMonth() !== lastM){ lastM = d.getMonth(); h += `<div class="amonth">${cap(MONTHS[lastM])}</div>`; }
+    h += `<section class="aday ${ds===t?'is-today':''}"><div class="adate"><span class="day-num">${d.getDate()}</span><small>${DAYS[wd(d)]}</small></div><div class="alist">${evs.map(e=>evCard(e,ds,opts.card&&opts.card(e))).join('')}</div></section>`;
   }
-  return h + '</div>';
+  return { html: h, n };
+}
+// Sotto la griglia: tutto il periodo (pulsante preselezionato) oppure solo il giorno toccato
+function periodList(days, label, emptyTxt){
+  let h = `<div class="scope"><button class="pchip all" data-scope aria-pressed="${!S.day}">${label}</button>`;
+  if(S.day){
+    const d = parse(S.day), evs = eventsOn(d);
+    h += `<h3>${cap(DAYS_LONG[wd(d)])} ${d.getDate()} ${MONTHS[d.getMonth()]}</h3></div><div class="agenda plist">
+      ${evs.length ? `<div class="alist">${evs.map(e=>evCard(e,S.day)).join('')}</div>` : '<span class="empty-day">Nessun impegno</span>'}
+      ${S.canWrite?`<button class="secondary add-day" data-add="${S.day}">+ Aggiungi in questo giorno</button>`:''}</div>`;
+  } else {
+    const g = dayGroups(days, d => eventsOn(d));
+    h += `</div><div class="agenda plist">${g.html || `<span class="empty-day">${emptyTxt}${S.filter.size?' per chi hai selezionato':''}</span>`}</div>`;
+  }
+  return h;
+}
+function viewWeek(){
+  const s = weekStart(S.anchor), days = [...Array(7)].map((_,i)=>addDays(s,i));
+  return `<div class="dow">${DAYS.map(d=>`<span>${d}</span>`).join('')}</div><div class="month wgrid">${days.map(d=>dayCell(d)).join('')}</div>`
+    + periodList(days, 'Settimana', 'Nessun impegno questa settimana');
 }
 function viewMonth(){
-  const a = S.anchor, first = new Date(a.getFullYear(), a.getMonth(), 1), start = weekStart(first), t = iso(today()), sel = iso(S.selDay);
+  const a = S.anchor, first = new Date(a.getFullYear(), a.getMonth(), 1), start = weekStart(first);
   let h = `<div class="dow">${DAYS.map(d=>`<span>${d}</span>`).join('')}</div><div class="month">`;
   for(let i=0;i<42;i++){
     const d = addDays(start,i); if(i===35 && d.getMonth()!==a.getMonth()) break;
-    const ds = iso(d), evs = eventsOn(d);
-    h += `<button class="mcell ${d.getMonth()!==a.getMonth()?'out':''} ${ds===t?'is-today':''} ${ds===sel?'sel':''}" data-day="${ds}" aria-label="${d.getDate()} ${MONTHS[d.getMonth()]}, ${evs.length} impegni">
-      <span class="mnum">${d.getDate()}</span>
-      ${evs.slice(0,3).map(e=>`<span class="mev ${e.type==='scadenza'?'is-deadline':''}" style="--c:${evColor(e)}">${e.allDay||!e.start?'':esc(e.start)+' '}${esc(e.title)}</span>`).join('')}
-      ${evs.length>3?`<span class="more">+${evs.length-3} altri</span>`:''}
-      <span class="dots">${evs.slice(0,5).map(e=>`<i style="--c:${evColor(e)}"></i>`).join('')}</span>
-    </button>`;
+    h += dayCell(d, d.getMonth()!==a.getMonth());
   }
-  h += '</div>';
-  const sd = S.selDay, evs = eventsOn(sd), sds = iso(sd);
-  h += `<section class="daypanel"><h3>${cap(DAYS_LONG[wd(sd)])} ${sd.getDate()} ${MONTHS[sd.getMonth()]}</h3>
-    ${evs.length ? evs.map(e=>evCard(e,sds)).join('') : '<span class="empty-day">Nessun impegno</span>'}
-    ${S.canWrite?`<button class="secondary" data-add="${sds}">+ Aggiungi in questo giorno</button>`:''}</section>`;
-  return h;
+  const days = [...Array(new Date(a.getFullYear(), a.getMonth()+1, 0).getDate())].map((_,i)=>new Date(a.getFullYear(), a.getMonth(), i+1));
+  return h + '</div>' + periodList(days, 'Mese', 'Nessun impegno questo mese');
 }
 function viewAgenda(){
   const t = iso(today()); let h = '<div class="agenda">', any = false, lastM = -1;
@@ -622,19 +633,24 @@ function viewAgenda(){
 }
 function viewPeople(){
   const shown = S.filter.size ? S.people.filter(p=>S.filter.has(p.id)) : S.people;
-  let h = '<div class="cols">';
+  if(!shown.some(p=>p.id===S.person)) S.person = shown[0] ? shown[0].id : null;
+  const days = [...Array(28)].map((_,i)=>addDays(S.anchor,i));
+  const mineOf = id => S.events.filter(e => !(e.who||[]).length || (e.who||[]).includes(id));
+  let h = '<div class="pcards">', sel = null;
   for(const p of shown){
-    const mine = S.events.filter(e => !(e.who||[]).length || (e.who||[]).includes(p.id));
-    let body = '', n = 0;
-    for(let i=0;i<28;i++){
-      const d = addDays(S.anchor,i), ds = iso(d);
-      const evs = mine.filter(e=>occursOn(e,d,ds)).sort(sortOcc);
-      if(!evs.length) continue; n++;
-      body += `<div class="sub">${cap(DAYS[wd(d)])} ${d.getDate()} ${MONTHS[d.getMonth()].slice(0,3)}</div>` + evs.map(e=>evCard(e,ds,{hideWho:(e.who||[]).length===1})).join('');
-    }
-    h += `<section class="col" style="--c:${safeColor(p.color)}"><h3><span class="pchip" style="--c:${safeColor(p.color)};padding:0;border:0;background:none"><span class="dot">${initial(p.name)}</span></span>${esc(p.name)}</h3>${body || '<span class="empty-day">Nessun impegno nelle prossime 4 settimane</span>'}</section>`;
+    const mine = mineOf(p.id), n = days.reduce((k,d)=>k + mine.filter(e=>occursOn(e,d,iso(d))).length, 0);
+    if(p.id === S.person) sel = p;
+    h += `<button class="pcard" style="--c:${safeColor(p.color)}" data-person="${esc(p.id)}" aria-pressed="${p.id===S.person}">
+      <b><span class="pchip" style="--c:${safeColor(p.color)};padding:0;border:0;background:none"><span class="dot">${initial(p.name)}</span></span>${esc(p.name)}</b>
+      <small>${n ? `${n} impegn${n===1?'o':'i'}` : 'Nessun impegno'}</small></button>`;
   }
-  return h + '</div>';
+  h += '</div>';
+  if(sel){
+    const mine = mineOf(sel.id);
+    const g = dayGroups(days, (d, ds) => mine.filter(e=>occursOn(e,d,ds)).sort(sortOcc), { months:true, card: e => ({hideWho:(e.who||[]).length===1}) });
+    h += `<div class="scope"><h3>Impegni di ${esc(sel.name)}</h3></div><div class="agenda plist">${g.html || '<span class="empty-day">Nessun impegno nelle prossime 4 settimane</span>'}</div>`;
+  }
+  return h;
 }
 
 /* ---------- sheet ---------- */
@@ -646,7 +662,7 @@ function refreshSheet(){ if(sheetKind === 'people') renderPeopleSheet(); }
 function openEditor(id, occ, pre){
   const base = id ? S.events.find(e=>e.id===id) : null;
   if(id && !base) return;
-  const d = occ || iso(S.view==='mese' ? S.selDay : today());
+  const d = occ || S.day || iso(today());
   draft = base ? JSON.parse(JSON.stringify(base)) : Object.assign({
     id:null, title:'', type:'altro', who: S.filter.size===1 ? [...S.filter] : [], date:d, allDay:false,
     start:'17:00', end:'18:00', rep:{freq:'none', days:[], interval:1, until:''}, skip:[], place:'', notes:''
@@ -707,7 +723,7 @@ async function saveEvent(){
   const isNew = !e.id; if(isNew) e.id = newId('e');
   saving = true;
   closeSheet();
-  if(isNew && (S.view==='mese'||S.view==='settimana')){ S.anchor = parse(e.date); if(S.view==='mese') S.selDay = parse(e.date); }
+  if(isNew && (S.view==='mese'||S.view==='settimana')){ S.anchor = parse(e.date); if(S.day && S.day !== e.date) S.day = null; }
   putDoc('events', e); saving = false;
   toast(isNew ? 'Impegno aggiunto' : 'Modifiche salvate');
 }
@@ -756,21 +772,21 @@ let toastT;
 function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('show'), 2600); }
 
 document.querySelectorAll('.views button').forEach(b => b.addEventListener('click', () => {
-  S.view = b.dataset.view;
+  S.view = b.dataset.view; S.day = null;
   if(S.view === 'agenda' || S.view === 'persone') S.anchor = today();
   try{ history.replaceState(null,'','#'+S.view); }catch(e){}
   render();
 }));
 function shift(dir){
-  const a = S.anchor;
+  const a = S.anchor; S.day = null;
   if(S.view === 'settimana') S.anchor = addDays(a, 7*dir);
-  else if(S.view === 'mese'){ S.anchor = new Date(a.getFullYear(), a.getMonth()+dir, 1); S.selDay = S.anchor; }
+  else if(S.view === 'mese'){ S.anchor = new Date(a.getFullYear(), a.getMonth()+dir, 1); }
   else S.anchor = addDays(a, (S.view==='agenda'?28:14)*dir);
   render();
 }
 $('#prev').onclick = () => shift(-1);
 $('#next').onclick = () => shift(1);
-$('#todayBtn').onclick = () => { S.anchor = today(); S.selDay = today(); render(); };
+$('#todayBtn').onclick = () => { S.anchor = today(); S.day = null; render(); };
 $('#fab').onclick = () => openEditor(null, null);
 $('#mic').onclick = voiceStart;
 $('#btnPeople').onclick = () => { renderPeopleSheet(); openSheet('people'); };
@@ -783,10 +799,13 @@ $('#filter').addEventListener('click', e => {
   if(!id) S.filter.clear(); else if(S.filter.has(id)) S.filter.delete(id); else S.filter.add(id);
   render();
 });
+function scrollToList(){ const p = document.querySelector('.scope'); if(p && p.getBoundingClientRect().top > window.innerHeight - 160) p.scrollIntoView({behavior:'smooth', block:'start'}); }
 $('#main').addEventListener('click', e => {
   const ev = e.target.closest('[data-ev]'); if(ev){ openEditor(ev.dataset.ev, ev.dataset.date); return; }
   const add = e.target.closest('[data-add]'); if(add){ openEditor(null, add.dataset.add); return; }
-  const day = e.target.closest('[data-day]'); if(day){ S.selDay = parse(day.dataset.day); render(); const p = document.querySelector('.daypanel'); if(p && window.innerWidth<700) p.scrollIntoView({behavior:'smooth', block:'nearest'}); return; }
+  const day = e.target.closest('[data-day]'); if(day){ S.day = S.day === day.dataset.day ? null : day.dataset.day; render(); scrollToList(); return; }
+  if(e.target.closest('[data-scope]')){ S.day = null; render(); return; }
+  const per = e.target.closest('[data-person]'); if(per){ S.person = per.dataset.person; render(); scrollToList(); return; }
   if(e.target.id === 'quickPersonAdd'){ const i = $('#quickPerson'); addPerson(i.value); }
   if(e.target.id === 'loginBtn'){ login($('#loginPw').value); }
   if(e.target.id === 'pwToggle'){ const i = $('#loginPw'), show = i.type === 'password'; i.type = show ? 'text' : 'password'; e.target.setAttribute('aria-pressed', show); e.target.setAttribute('aria-label', show ? 'Nascondi password' : 'Mostra password'); i.focus(); }

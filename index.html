@@ -233,7 +233,7 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 <div class="toast" id="toast" role="status"></div>
 <!-- VERSIONE: a ogni modifica aumentala insieme a CACHE in sw.js (stesso numero) -->
-<div class="ver" aria-hidden="true">v9</div>
+<div class="ver" aria-hidden="true">v10</div>
 
 <script>
 (function(){
@@ -777,6 +777,7 @@ function renderPeopleSheet(){
   </div>`).join('') || '<p class="hint">Nessuno ancora.</p>'}
   ${ro?'':`<div class="row" style="margin-top:14px"><input class="input" id="newPerson" autocomplete="off" placeholder="Aggiungi una persona" maxlength="30" style="flex:1"><button class="primary" id="addPerson" style="flex:0">Aggiungi</button></div>`}
   <p class="hint" style="margin-top:16px">Per condividere il calendario manda ai familiari l’indirizzo di questa pagina e la password. Sul telefono, dal menu del browser scegli “Installa app” o “Aggiungi a schermata Home”.</p>
+  <button class="secondary" id="copyLink" style="width:100%;margin-top:10px">🔗 Copia il link da condividere</button>
   <div class="actions"><button class="secondary" id="logoutBtn">Esci da questo dispositivo</button><button class="secondary" data-close style="flex:1">Fatto</button></div>`;
 }
 async function addPerson(name){
@@ -798,6 +799,17 @@ async function removePerson(id){
 
 /* ---------- events ---------- */
 let toastT;
+// Indirizzo dell'app senza la vista (#settimana ecc.)
+async function copyLink(){
+  const url = location.origin + location.pathname;
+  try{ await navigator.clipboard.writeText(url); }
+  catch(err){
+    const i = document.createElement('textarea'); i.value = url; i.setAttribute('readonly',''); i.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(i); i.select(); const ok = document.execCommand('copy'); i.remove();
+    if(!ok){ prompt('Copia questo link:', url); return; }
+  }
+  toast('Link copiato: incollalo in un messaggio ai familiari.');
+}
 function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('show'), 2600); }
 
 document.querySelectorAll('.views button').forEach(b => b.addEventListener('click', () => {
@@ -883,6 +895,7 @@ sheet.addEventListener('click', e => {
     if(t.id === 'delAll') deleteAll();
   }
   if(sheetKind === 'people'){
+    if(t.id === 'copyLink'){ copyLink(); return; }
     if(t.id === 'addPerson'){ const i = $('#newPerson'); addPerson(i.value); i.value = ''; return; }
     if(t.dataset.pdel){ removePerson(t.dataset.pdel); return; }
     if(t.dataset.pcolor){ updatePerson(t.dataset.for, {color:t.dataset.pcolor}); return; }

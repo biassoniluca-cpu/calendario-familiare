@@ -167,6 +167,13 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 .input:focus{border-color:var(--accent);outline:none}
 .title-input{font-size:1.15rem;font-weight:600}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tbtn{text-align:left;font-weight:600;font-variant-numeric:tabular-nums}
+.tbtn[aria-expanded="true"]{border-color:var(--accent);outline:2px solid var(--accent);outline-offset:-1px}
+.tpick{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:10px;margin:-4px 0 14px;display:grid;gap:8px}
+.tp-head{font-weight:700;font-size:.85rem;color:var(--muted)}
+.tp-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
+.tp{border:1.5px solid var(--line);background:var(--surface);border-radius:10px;min-height:40px;font-weight:600;font-variant-numeric:tabular-nums}
+.tp[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .tchip{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 12px;font-weight:600;font-size:.92rem}
 .tchip[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
@@ -226,7 +233,7 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 <div class="toast" id="toast" role="status"></div>
 <!-- VERSIONE: a ogni modifica aumentala insieme a CACHE in sw.js (stesso numero) -->
-<div class="ver" aria-hidden="true">v8</div>
+<div class="ver" aria-hidden="true">v9</div>
 
 <script>
 (function(){
@@ -670,8 +677,28 @@ function openEditor(id, occ, pre){
     start:'17:00', end:'18:00', rep:{freq:'none', days:[], interval:1, until:''}, skip:[], place:'', notes:''
   }, pre || {});
   draft.rep = Object.assign({freq:'none',days:[],interval:1,until:''}, draft.rep||{});
-  draftOcc = occ || draft.date;
+  draftOcc = occ || draft.date; timePick = null;
   renderEditor(); openSheet('event');
+}
+// Selettore dell'ora dentro la scheda (quello di sistema su alcuni telefoni esce dallo schermo)
+let timePick = null;
+function timePicker(){
+  const v = draft[timePick] || (timePick === 'end' ? draft.start : '') || '17:00', [h, m] = v.split(':').map(Number);
+  const cell = (attr, n, on) => `<button type="button" class="tp" ${attr}="${n}" aria-pressed="${on}">${pad(n)}</button>`;
+  return `<div class="tpick"><div class="tp-head">${timePick==='start' ? (draft.type==='scadenza'?'Entro le':'Ora di inizio') : 'Ora di fine'}</div>
+    <div class="tp-grid">${[...Array(24)].map((_,i)=>cell('data-th', i, i===h)).join('')}</div>
+    <div class="tp-head">Minuti</div>
+    <div class="tp-grid">${[...Array(12)].map((_,i)=>cell('data-tm', i*5, i*5===m)).join('')}</div>
+    <div class="actions">${timePick==='end' ? '<button type="button" class="secondary" data-tnone>Senza ora di fine</button>' : ''}<button type="button" class="secondary" data-tdone style="flex:1">Fatto</button></div></div>`;
+}
+const toMin = t => { const [h, m] = t.split(':').map(Number); return h*60 + m; };
+function setTime(k, t){
+  if(k === 'start' && draft.end && draft.start){
+    const dur = toMin(draft.end) - toMin(draft.start);
+    if(dur > 0) draft.end = minHM(Math.min(toMin(t) + dur, 23*60+59));
+  }
+  draft[k] = t;
+  if(k === 'start' && (!draft.end || toMin(draft.end) <= toMin(t))) draft.end = minHM(Math.min(toMin(t) + 60, 23*60+59));
 }
 function repValue(){ const r = draft.rep; if(r.freq==='weekly') return r.interval===2?'biweekly':'weekly'; return r.freq||'none'; }
 function renderEditor(){
@@ -688,9 +715,9 @@ function renderEditor(){
     <div class="field"><span class="flabel">&nbsp;</span><label class="switch"><input type="checkbox" data-k="allDay" ${e.allDay?'checked':''} ${ro?'disabled':''}> Tutto il giorno</label></div>
   </div>
   ${e.allDay ? '' : `<div class="grid2">
-    <div class="field"><label for="f-start">${e.type==='scadenza'?'Entro le':'Inizio'}</label><input class="input" type="time" id="f-start" data-k="start" value="${esc(e.start)}" ${ro?'disabled':''}></div>
-    ${e.type==='scadenza'?'':`<div class="field"><label for="f-end">Fine</label><input class="input" type="time" id="f-end" data-k="end" value="${esc(e.end)}" ${ro?'disabled':''}></div>`}
-  </div>`}
+    <div class="field"><span class="flabel">${e.type==='scadenza'?'Entro le':'Inizio'}</span><button type="button" class="input tbtn" id="f-start" data-tpick="start" aria-expanded="${timePick==='start'}" ${ro?'disabled':''}>${esc(e.start||'—')}</button></div>
+    ${e.type==='scadenza'?'':`<div class="field"><span class="flabel">Fine</span><button type="button" class="input tbtn" id="f-end" data-tpick="end" aria-expanded="${timePick==='end'}" ${ro?'disabled':''}>${esc(e.end||'—')}</button></div>`}
+  </div>${timePick ? timePicker() : ''}`}
   <div class="field"><label for="f-rep">Ripeti</label>
     <select class="input" id="f-rep" ${ro?'disabled':''}>
       <option value="none" ${repValue()==='none'?'selected':''}>Non si ripete</option>
@@ -842,6 +869,15 @@ sheet.addEventListener('click', e => {
     if(t.dataset.type){ applyTypePreset(t.dataset.type); renderEditor(); return; }
     if(t.dataset.who){ const id = t.dataset.who, w = new Set(draft.who||[]); w.has(id)?w.delete(id):w.add(id); draft.who = [...w]; t.setAttribute('aria-pressed', w.has(id)); return; }
     if(t.dataset.dayToggle !== undefined){ const i = +t.dataset.dayToggle, s = new Set(draft.rep.days||[]); s.has(i)?s.delete(i):s.add(i); draft.rep.days = [...s].sort(); t.setAttribute('aria-pressed', s.has(i)); return; }
+    if(t.dataset.tpick){ timePick = timePick === t.dataset.tpick ? null : t.dataset.tpick; renderEditor(); return; }
+    if(t.dataset.th || t.dataset.tm){
+      const cur = (draft[timePick] || (timePick === 'end' ? draft.start : '') || '17:00').split(':');
+      setTime(timePick, t.dataset.th ? `${pad(+t.dataset.th)}:${cur[1]}` : `${cur[0]}:${pad(+t.dataset.tm)}`);
+      if(t.dataset.tm) timePick = timePick === 'start' && draft.type !== 'scadenza' ? 'end' : null;  // scelti i minuti: passa alla fine, poi chiude
+      renderEditor(); return;
+    }
+    if(t.hasAttribute('data-tnone')){ draft.end = ''; timePick = null; renderEditor(); return; }
+    if(t.hasAttribute('data-tdone')){ timePick = null; renderEditor(); return; }
     if(t.id === 'saveEv') saveEvent();
     if(t.id === 'delOne') deleteOne();
     if(t.id === 'delAll') deleteAll();

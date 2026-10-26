@@ -1,5 +1,5 @@
 // Tiene in cache l'app così si apre anche senza rete. I dati arrivano sempre dal foglio Google.
-const CACHE = 'famcal-v10';
+const CACHE = 'famcal-v11';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

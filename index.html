@@ -233,7 +233,7 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 <div class="toast" id="toast" role="status"></div>
 <!-- VERSIONE: a ogni modifica aumentala insieme a CACHE in sw.js (stesso numero) -->
-<div class="ver" aria-hidden="true">v10</div>
+<div class="ver" aria-hidden="true">v11</div>
 
 <script>
 (function(){
@@ -250,7 +250,8 @@ const DAYS = ['lun','mar','mer','gio','ven','sab','dom'];
 const DAYS_LONG = ['lunedì','martedì','mercoledì','giovedì','venerdì','sabato','domenica'];
 const MONTHS = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-const COLORS = ['#E4572E','#2F6FDB','#E0A100','#2E9E6B','#8A4FD3','#D6457E','#159A9C','#6B7785'];
+const COLORS = ['#E4572E','#2F6FDB','#E0A100','#2E9E6B','#8A4FD3','#D6457E','#159A9C','#6B7785',
+  '#B3261E','#F08A24','#7A9A01','#1E6F43','#1D4E9E','#3AA5DC','#8B5A3C','#B83DBA'];
 const safeColor = c => /^#[0-9a-fA-F]{6}$/.test(c||'') ? c : '#6B7785';
 const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 const TYPES = {

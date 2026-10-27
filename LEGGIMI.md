@@ -32,3 +32,10 @@ Manda a tutti l'indirizzo e la password. Sul telefono:
 - Se modifichi `apps-script/Code.gs`: Esegui il deployment → Gestisci deployment → modifica → Nuova versione (così l'URL resta lo stesso).
 - I dati sono leggibili nel foglio (schede "Persone" e "Impegni"): non modificare a mano la colonna "dati".
 - Le modifiche degli altri compaiono entro ~30 secondi, o subito riaprendo l'app.
+
+## Notifiche (facoltative)
+L'app usa Firebase Cloud Messaging (progetto `calendario-famiglia-4b9ff`). I dati pubblici dell'app web sono già in `index.html` e `sw.js`.
+1. In Firebase: Impostazioni progetto → Account di servizio → **Genera nuova chiave privata** (file `.json`). **Non metterlo nel repository.**
+2. In Apps Script: incolla il nuovo `apps-script/Code.gs`; in ⚙ Impostazioni progetto imposta il fuso orario **(GMT+01:00) Roma** e in **Proprietà script** aggiungi `FIREBASE_SA` con tutto il contenuto del file `.json`.
+3. Esegui una volta la funzione `attivaPromemoria` (accetta le autorizzazioni), poi Esegui il deployment → Gestisci deployment → modifica → **Nuova versione**.
+4. Su ogni telefono: scheda Famiglia 👥 → scegli di chi è il telefono → **Attiva notifiche** → **Manda una prova**. Su iPhone serve iOS 16.4+ e l'app aggiunta alla schermata Home.

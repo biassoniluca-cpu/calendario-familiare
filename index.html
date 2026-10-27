@@ -133,6 +133,8 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 .pcard{background:var(--surface);border:1px solid var(--line);border-top:6px solid var(--c);border-radius:16px;padding:12px;text-align:left;color:var(--ink);display:grid;gap:4px}
 .pcard[aria-pressed="true"]{outline:2.5px solid var(--c);outline-offset:-1px;background:color-mix(in srgb, var(--c) 8%, var(--surface))}
 .pcard b{font-family:var(--display);font-size:1.15rem;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+.pushbox{border-top:1px solid var(--line);margin-top:16px;padding-top:14px;display:grid;gap:8px}
+.pushbox h3{margin:0;font-family:var(--display);font-size:1.05rem;display:flex;align-items:center;gap:8px}
 .pcard small{color:var(--muted);font-weight:600}
 
 .empty{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px;max-width:520px;display:grid;gap:12px}
@@ -233,7 +235,7 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 <div class="toast" id="toast" role="status"></div>
 <!-- VERSIONE: a ogni modifica aumentala insieme a CACHE in sw.js (stesso numero) -->
-<div class="ver" aria-hidden="true">v11</div>
+<div class="ver" aria-hidden="true">v12</div>
 
 <script>
 (function(){
@@ -284,7 +286,7 @@ async function api(payload){
     const r = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({...payload, password: store.pw}) });
     j = await r.json();
   }catch(err){ const e = new Error('unreachable'); e.code = navigator.onLine === false ? 'offline' : 'unreachable'; throw e; }
-  if(!j.ok){ const e = new Error(j.error||'errore'); e.code = j.error; throw e; }
+  if(!j.ok){ const e = new Error(j.error||'errore'); e.code = j.error; e.detail = j.detail; throw e; }
   return j;
 }
 function sortPeople(arr){ return arr.sort((a,b)=>(a.order||0)-(b.order||0) || String(a.name).localeCompare(b.name)); }
@@ -311,11 +313,12 @@ function startPolling(){
 }
 async function init(){
   try{ store.pw = localStorage.getItem(LS_PW) || ''; }catch(e){}
+  pushLoad();
   if(!/^https:\/\//.test(API_URL)){ S.mode = 'config'; render(); return; }
   if(!store.pw){ S.mode = 'login'; render(); return; }
   cacheLoad();
   if(S.people.length || S.events.length){ S.mode = 'offline'; render(); S.mode = 'online'; }
-  await sync(); startPolling();
+  await sync(); startPolling(); pushResume();
 }
 async function login(pw){
   pw = (pw||'').trim(); if(!pw) return;
@@ -323,7 +326,7 @@ async function login(pw){
   try{
     const j = await api({action:'list'});
     try{ localStorage.setItem(LS_PW, pw); }catch(e){}
-    applyData(j); S.mode = 'online'; render(); startPolling();
+    applyData(j); S.mode = 'online'; render(); startPolling(); pushResume();
   }catch(e){
     store.pw = ''; S.mode = 'login';
     S.loginError = ({
@@ -351,12 +354,12 @@ function enqueue(payload){
   return p;
 }
 // Aggiorna subito lo schermo, poi salva sul foglio in background
-function putDoc(coll, obj){
+function putDoc(coll, obj, extra){
   const arr = coll === 'people' ? S.people : S.events;
   const i = arr.findIndex(x => x.id === obj.id); if(i >= 0) arr[i] = obj; else arr.push(obj);
   if(coll === 'people') sortPeople(arr);
   cacheSave(); render(); refreshSheet();
-  enqueue({action:'put', coll, item: JSON.parse(JSON.stringify(obj))}).catch(writeFail);
+  enqueue(Object.assign({action:'put', coll, item: JSON.parse(JSON.stringify(obj))}, extra)).catch(writeFail);
 }
 function delDoc(coll, id){
   const arr = coll === 'people' ? S.people : S.events;
@@ -468,6 +471,89 @@ function voiceStart(){
   try{ rec.start(); }catch(err){ rec.onend(); }
 }
 
+/* ---------- notifiche (Firebase Cloud Messaging) ---------- */
+// Dati pubblici dell'app web Firebase; la chiave privata sta solo in Apps Script
+const FB_CONFIG = {
+  apiKey: "AIzaSyA4Bisbdv24ML2o-T37JkD9gSWmemnU_Jw",
+  authDomain: "calendario-famiglia-4b9ff.firebaseapp.com",
+  projectId: "calendario-famiglia-4b9ff",
+  storageBucket: "calendario-famiglia-4b9ff.firebasestorage.app",
+  messagingSenderId: "411484582881",
+  appId: "1:411484582881:web:39e99e118457bb65af58a0"
+};
+const VAPID_KEY = 'BC9C5nGXTGTNTAzvlw9HouSwMs5XtjrvIe-cQw_KLrjJh9tDcAsuY923h8V3Lfj_xvXRvYsjm8EwjEvFaOYDDxI';
+const FB_SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
+const BEFORE = [[0,'All’ora esatta'],[15,'15 min'],[30,'30 min'],[60,'1 ora'],[120,'2 ore'],[1440,'1 giorno'],[2880,'2 giorni'],[10080,'1 settimana']];
+const LS_PUSH = 'famcal-push';
+const push = { token:'', persons:[] };
+let messaging = null, pushSel = new Set(), pushBusy = false;
+const pushSupported = () => 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window && location.protocol === 'https:';
+function loadScript(src){ return new Promise((ok, ko) => { const x = document.createElement('script'); x.src = src; x.onload = ok; x.onerror = ko; document.head.appendChild(x); }); }
+async function fcm(){
+  if(messaging) return messaging;
+  await loadScript(FB_SDK + 'firebase-app-compat.js'); await loadScript(FB_SDK + 'firebase-messaging-compat.js');
+  if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+  messaging = firebase.messaging();
+  // con l'app aperta la notifica non compare da sola: la mostro come messaggio
+  messaging.onMessage(m => { const n = m.notification || {}; toast(`🔔 ${n.title || ''}${n.body ? ' · ' + n.body : ''}`); });
+  return messaging;
+}
+async function pushToken(){ const m = await fcm(), reg = await navigator.serviceWorker.ready; return m.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg }); }
+function pushSave(){ try{ localStorage.setItem(LS_PUSH, JSON.stringify(push)); }catch(e){} }
+function pushLoad(){ try{ Object.assign(push, JSON.parse(localStorage.getItem(LS_PUSH) || '{}')); }catch(e){} }
+async function pushEnable(){
+  if(!pushSupported()){ toast(/iPhone|iPad/.test(navigator.userAgent) ? 'Su iPhone prima aggiungi l’app alla schermata Home e aprila da lì.' : 'Questo browser non supporta le notifiche.'); return; }
+  pushBusy = true; refreshSheet();
+  try{
+    if(await Notification.requestPermission() !== 'granted'){ toast('Notifiche non consentite: abilitale nelle impostazioni del browser per questo sito.'); return; }
+    const token = await pushToken();
+    await api({action:'subscribe', token, persons:[...pushSel]});
+    push.token = token; push.persons = [...pushSel]; pushSave();
+    toast('Notifiche attive su questo telefono. Prova con “Manda una prova”.');
+  }catch(e){ if(e.code === 'wrong_password') return writeFail(e); console.error(e); toast('Non riesco ad attivare le notifiche: riprova.'); }
+  finally{ pushBusy = false; refreshSheet(); }
+}
+async function pushPersons(){
+  push.persons = [...pushSel]; pushSave();
+  try{ await api({action:'subscribe', token:push.token, persons:push.persons}); }catch(e){ toast('Modifica non salvata: riprova.'); }
+}
+async function pushDisable(){
+  const t = push.token; push.token = ''; push.persons = []; pushSave(); refreshSheet();
+  try{ await api({action:'unsubscribe', token:t}); await (await fcm()).deleteToken(); }catch(e){}
+  toast('Notifiche disattivate su questo telefono');
+}
+async function pushTest(){
+  try{ await api({action:'testpush', token:push.token}); toast('Notifica di prova inviata: arriva tra qualche secondo.'); }
+  catch(e){ toast(e.code === 'no_firebase' ? 'In Apps Script manca la proprietà FIREBASE_SA.' : 'Invio non riuscito' + (e.detail ? ': ' + String(e.detail).slice(0,140) : '.')); }
+}
+// All'avvio: se le notifiche sono attive ricollego Firebase e aggiorno il token se è cambiato
+async function pushResume(){
+  if(!push.token || !pushSupported() || Notification.permission !== 'granted') return;
+  try{
+    const t = await pushToken();
+    if(t && t !== push.token){ const old = push.token; await api({action:'subscribe', token:t, persons:push.persons}); push.token = t; pushSave(); api({action:'unsubscribe', token:old}).catch(()=>{}); }
+  }catch(e){}
+}
+function pushSection(){
+  const on = !!push.token;
+  return `<div class="pushbox"><h3>🔔 Notifiche su questo telefono ${on ? '<span class="badge">attive</span>' : ''}</h3>
+    <span class="flabel">Questo telefono è di:</span>
+    <div class="chips">${S.people.map(p=>`<button class="pchip" style="--c:${safeColor(p.color)}" data-pushp="${esc(p.id)}" aria-pressed="${pushSel.has(p.id)}"><span class="dot">${initial(p.name)}</span>${esc(p.name)}</button>`).join('')}</div>
+    <span class="hint">Riceverà gli avvisi mandati a queste persone e quelli per tutti.</span>
+    ${on ? `<div class="actions"><button class="secondary" id="pushTest" style="flex:1">Manda una prova</button><button class="secondary" id="pushOff">Disattiva</button></div>`
+         : `<button class="primary" id="pushOn" ${pushBusy?'disabled':''}>${pushBusy ? 'Attivazione…' : 'Attiva notifiche'}</button>`}
+  </div>`;
+}
+// Sezione "Promemoria" della scheda impegno. notify.to non impostato = le persone dell'impegno
+let draftAnnounce = false;
+function notifySection(e){
+  const n = e.notify = Object.assign({before:[], to:null}, e.notify);
+  const eff = Array.isArray(n.to) ? n.to : (e.who||[]);
+  return `<div class="field"><span class="flabel">🔔 Promemoria</span><div class="chips">${BEFORE.map(([m,l])=>`<button class="tchip" data-nbefore="${m}" aria-pressed="${n.before.includes(m)}">${l}</button>`).join('')}</div><span class="hint">Puoi sceglierne più di uno, oppure nessuno.</span></div>
+  <div class="field"><label class="switch"><input type="checkbox" id="f-announce" ${draftAnnounce?'checked':''}> ${e.id ? 'Avvisa subito della modifica' : 'Avvisa subito del nuovo impegno'}</label></div>
+  ${n.before.length || draftAnnounce ? `<div class="field"><span class="flabel">A chi mandare la notifica</span><div class="chips"><button class="pchip all" data-nto="" aria-pressed="${!eff.length}">Tutti</button>${S.people.map(p=>`<button class="pchip" style="--c:${safeColor(p.color)}" data-nto="${esc(p.id)}" aria-pressed="${eff.includes(p.id)}"><span class="dot">${initial(p.name)}</span>${esc(p.name)}</button>`).join('')}</div><span class="hint">Arriva ai telefoni su cui sono attivate le notifiche (scheda Famiglia 👥).</span></div>` : ''}`;
+}
+
 /* ---------- recurrence ---------- */
 function occursOn(ev, d, ds){
   if(!ev.date || ds < ev.date) return false;
@@ -529,7 +615,7 @@ function evCard(ev, ds, opts={}){
   return `<button class="ev ${ev.type==='scadenza'?'is-deadline':''}" style="--c:${evColor(ev)}" data-ev="${esc(ev.id)}" data-date="${ds}">
     <span class="ev-time">${esc(timeLabel(ev))}${badge}</span>
     <span class="ev-title">${t.icon} ${esc(ev.title)}</span>
-    <span class="ev-meta">${who}${ev.place?`<span>📍 ${esc(ev.place)}</span>`:''}${rep?`<span class="rep">🔁 ${esc(rep)}</span>`:''}</span>
+    <span class="ev-meta">${who}${ev.place?`<span>📍 ${esc(ev.place)}</span>`:''}${rep?`<span class="rep">🔁 ${esc(rep)}</span>`:''}${ev.notify&&ev.notify.before&&ev.notify.before.length?'<span>🔔</span>':''}</span>
   </button>`;
 }
 
@@ -678,7 +764,7 @@ function openEditor(id, occ, pre){
     start:'17:00', end:'18:00', rep:{freq:'none', days:[], interval:1, until:''}, skip:[], place:'', notes:''
   }, pre || {});
   draft.rep = Object.assign({freq:'none',days:[],interval:1,until:''}, draft.rep||{});
-  draftOcc = occ || draft.date; timePick = null;
+  draftOcc = occ || draft.date; timePick = null; draftAnnounce = false;
   renderEditor(); openSheet('event');
 }
 // Selettore dell'ora dentro la scheda (quello di sistema su alcuni telefoni esce dallo schermo)
@@ -730,6 +816,7 @@ function renderEditor(){
   ${recurring ? `<div class="field"><label for="f-until">Fino al (facoltativo)</label><input class="input" type="date" id="f-until" data-rep="until" value="${esc(e.rep.until||'')}" ${ro?'disabled':''}><span class="hint">Es. la fine della stagione sportiva o dell’anno scolastico.</span></div>`:''}
   <div class="field"><label for="f-place">Dove</label><input class="input" id="f-place" autocomplete="off" data-k="place" value="${esc(e.place)}" placeholder="Es. Centro sportivo Iseo" maxlength="80" ${ro?'disabled':''}></div>
   <div class="field"><label for="f-notes">Note</label><textarea class="input" id="f-notes" autocomplete="off" data-k="notes" rows="2" placeholder="Es. portare la divisa bianca" maxlength="400" ${ro?'disabled':''}>${esc(e.notes)}</textarea></div>
+  ${ro ? '' : notifySection(e)}
   ${ro ? `<div class="actions"><button class="secondary" data-close style="flex:1">Chiudi</button></div>` : `
   <div class="actions sheet-save"><button class="secondary" data-close>Annulla</button><button class="primary" id="saveEv">${e.id?'Salva modifiche':'Aggiungi al calendario'}</button></div>
   ${e.id ? `<div class="actions" style="margin-top:14px">${recurring ? `<button class="danger" id="delOne">Elimina solo ${occD.getDate()} ${MONTHS[occD.getMonth()].slice(0,3)}</button><button class="danger" id="delAll">Elimina tutta la serie</button>` : `<button class="danger" id="delAll">Elimina impegno</button>`}</div>`:''}`}`;
@@ -751,10 +838,13 @@ async function saveEvent(){
   if(e.rep.freq === 'none'){ e.rep = {freq:'none', days:[], interval:1, until:''}; }
   if(!e.allDay && e.start && e.end && e.end < e.start) e.end = '';
   const isNew = !e.id; if(isNew) e.id = newId('e');
+  // senza promemoria tengo solo i destinatari, se serve per "Avvisa subito"
+  if(e.notify && !(e.notify.before && e.notify.before.length)){ if(draftAnnounce) e.notify = {before:[], to:e.notify.to}; else delete e.notify; }
+  const ann = draftAnnounce ? {announce: isNew ? 'new' : 'edit', from: push.token || undefined} : undefined;
   saving = true;
   closeSheet();
   if(isNew && (S.view==='mese'||S.view==='settimana')){ S.anchor = parse(e.date); if(S.day && S.day !== e.date) S.day = null; }
-  putDoc('events', e); saving = false;
+  putDoc('events', e, ann); saving = false;
   toast(isNew ? 'Impegno aggiunto' : 'Modifiche salvate');
 }
 async function deleteOne(){
@@ -777,6 +867,7 @@ function renderPeopleSheet(){
     <div class="swatches">${COLORS.map(c=>`<button class="sw" style="--c:${c}" data-pcolor="${c}" data-for="${esc(p.id)}" aria-label="Colore" aria-pressed="${safeColor(p.color)===c}" ${ro?'disabled':''}></button>`).join('')}</div>
   </div>`).join('') || '<p class="hint">Nessuno ancora.</p>'}
   ${ro?'':`<div class="row" style="margin-top:14px"><input class="input" id="newPerson" autocomplete="off" placeholder="Aggiungi una persona" maxlength="30" style="flex:1"><button class="primary" id="addPerson" style="flex:0">Aggiungi</button></div>`}
+  ${ro ? '' : pushSection()}
   <p class="hint" style="margin-top:16px">Per condividere il calendario manda ai familiari l’indirizzo di questa pagina e la password. Sul telefono, dal menu del browser scegli “Installa app” o “Aggiungi a schermata Home”.</p>
   <button class="secondary" id="copyLink" style="width:100%;margin-top:10px">🔗 Copia il link da condividere</button>
   <div class="actions"><button class="secondary" id="logoutBtn">Esci da questo dispositivo</button><button class="secondary" data-close style="flex:1">Fatto</button></div>`;
@@ -831,7 +922,7 @@ $('#next').onclick = () => shift(1);
 $('#todayBtn').onclick = () => { S.anchor = today(); S.day = null; render(); };
 $('#fab').onclick = () => openEditor(null, null);
 $('#mic').onclick = voiceStart;
-$('#btnPeople').onclick = () => { renderPeopleSheet(); openSheet('people'); };
+$('#btnPeople').onclick = () => { pushSel = new Set(push.persons); renderPeopleSheet(); openSheet('people'); };
 $('#scrim').onclick = closeSheet;
 document.addEventListener('keydown', e => { if(e.key === 'Escape' && sheetKind) closeSheet(); });
 
@@ -866,6 +957,7 @@ sheet.addEventListener('input', e => {
   if(r){ draft.rep[r] = e.target.value; }
 });
 sheet.addEventListener('change', e => {
+  if(sheetKind === 'event' && e.target.id === 'f-announce'){ draftAnnounce = e.target.checked; renderEditor(); return; }
   if(sheetKind === 'event' && e.target.id === 'f-rep'){
     const v = e.target.value;
     if(v === 'none') draft.rep.freq = 'none';
@@ -880,7 +972,15 @@ sheet.addEventListener('click', e => {
   if(t.hasAttribute('data-close')){ closeSheet(); return; }
   if(sheetKind === 'event'){
     if(t.dataset.type){ applyTypePreset(t.dataset.type); renderEditor(); return; }
-    if(t.dataset.who){ const id = t.dataset.who, w = new Set(draft.who||[]); w.has(id)?w.delete(id):w.add(id); draft.who = [...w]; t.setAttribute('aria-pressed', w.has(id)); return; }
+    if(t.dataset.who){ const id = t.dataset.who, w = new Set(draft.who||[]); w.has(id)?w.delete(id):w.add(id); draft.who = [...w]; t.setAttribute('aria-pressed', w.has(id));
+      if(draft.notify && !Array.isArray(draft.notify.to)) renderEditor();   // "A chi" segue "Chi"
+      return; }
+    if(t.dataset.nbefore !== undefined){ const m = +t.dataset.nbefore, b = new Set(draft.notify.before); b.has(m)?b.delete(m):b.add(m); draft.notify.before = [...b].sort((x,y)=>x-y); renderEditor(); return; }
+    if(t.dataset.nto !== undefined){
+      const n = draft.notify, id = t.dataset.nto;
+      if(!id) n.to = []; else { const c = new Set(Array.isArray(n.to) ? n.to : (draft.who||[])); c.has(id)?c.delete(id):c.add(id); n.to = [...c]; }
+      renderEditor(); return;
+    }
     if(t.dataset.dayToggle !== undefined){ const i = +t.dataset.dayToggle, s = new Set(draft.rep.days||[]); s.has(i)?s.delete(i):s.add(i); draft.rep.days = [...s].sort(); t.setAttribute('aria-pressed', s.has(i)); return; }
     if(t.dataset.tpick){ timePick = timePick === t.dataset.tpick ? null : t.dataset.tpick; renderEditor(); return; }
     if(t.dataset.th || t.dataset.tm){
@@ -897,6 +997,10 @@ sheet.addEventListener('click', e => {
   }
   if(sheetKind === 'people'){
     if(t.id === 'copyLink'){ copyLink(); return; }
+    if(t.dataset.pushp){ const id = t.dataset.pushp; pushSel.has(id) ? pushSel.delete(id) : pushSel.add(id); t.setAttribute('aria-pressed', pushSel.has(id)); if(push.token) pushPersons(); return; }
+    if(t.id === 'pushOn'){ pushEnable(); return; }
+    if(t.id === 'pushOff'){ pushDisable(); return; }
+    if(t.id === 'pushTest'){ pushTest(); return; }
     if(t.id === 'addPerson'){ const i = $('#newPerson'); addPerson(i.value); i.value = ''; return; }
     if(t.dataset.pdel){ removePerson(t.dataset.pdel); return; }
     if(t.dataset.pcolor){ updatePerson(t.dataset.for, {color:t.dataset.pcolor}); return; }

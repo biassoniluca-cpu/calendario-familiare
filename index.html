@@ -133,6 +133,7 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 .pcard{background:var(--surface);border:1px solid var(--line);border-top:6px solid var(--c);border-radius:16px;padding:12px;text-align:left;color:var(--ink);display:grid;gap:4px}
 .pcard[aria-pressed="true"]{outline:2.5px solid var(--c);outline-offset:-1px;background:color-mix(in srgb, var(--c) 8%, var(--surface))}
 .pcard b{font-family:var(--display);font-size:1.15rem;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+.steps{margin:12px 0 14px;padding-left:22px;display:grid;gap:6px}
 .pushbox{border-top:1px solid var(--line);margin-top:16px;padding-top:14px;display:grid;gap:8px}
 .pushbox h3{margin:0;font-family:var(--display);font-size:1.05rem;display:flex;align-items:center;gap:8px}
 .pcard small{color:var(--muted);font-weight:600}
@@ -242,7 +243,7 @@ body:has(.sheet.open){overscroll-behavior-y:none}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 <div class="toast" id="toast" role="status"></div>
 <!-- VERSIONE: a ogni modifica aumentala insieme a CACHE in sw.js (stesso numero) -->
-<div class="ver" aria-hidden="true">v15</div>
+<div class="ver" aria-hidden="true">v16</div>
 
 <script>
 (function(){
@@ -325,7 +326,7 @@ async function init(){
   if(!store.pw){ S.mode = 'login'; render(); return; }
   cacheLoad();
   if(S.people.length || S.events.length){ S.mode = 'offline'; render(); S.mode = 'online'; }
-  await sync(); startPolling(); pushResume();
+  await sync(); startPolling(); pushResume(); pushHint();
 }
 async function login(pw){
   pw = (pw||'').trim(); if(!pw) return;
@@ -333,7 +334,7 @@ async function login(pw){
   try{
     const j = await api({action:'list'});
     try{ localStorage.setItem(LS_PW, pw); }catch(e){}
-    applyData(j); S.mode = 'online'; render(); startPolling(); pushResume();
+    applyData(j); S.mode = 'online'; render(); startPolling(); pushResume(); pushHint();
   }catch(e){
     store.pw = ''; S.mode = 'login';
     S.loginError = ({
@@ -555,6 +556,25 @@ function pushSection(){
          : `<button class="primary" id="pushOn" ${pushBusy?'disabled':''}>${pushBusy ? 'Attivazione…' : 'Attiva notifiche'}</button>`}
   </div>`;
 }
+// Avviso all'accesso: spiega come attivare le notifiche (una volta per apertura, finché non si spunta "non mostrare più")
+const LS_HINT = 'famcal-push-hint-off';
+let hintShown = false;
+function pushHint(){
+  const ios = /iPhone|iPad/.test(navigator.userAgent), standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  let off = false; try{ off = !!localStorage.getItem(LS_HINT); }catch(e){}
+  if(hintShown || off || push.token || !S.canWrite || !S.people.length || !(pushSupported() || ios)) return;
+  hintShown = true;
+  setTimeout(() => {
+    if(sheetKind || push.token) return;
+    $('#sheet').innerHTML = `<div class="grab"></div><h2 id="sheetTitle">🔔 Ricevi i promemoria</h2>
+      <p>Il calendario può avvisarti degli impegni con una notifica sul telefono, anche ad app chiusa: per esempio un’ora prima della visita o il giorno prima di una scadenza.</p>
+      ${ios && !standalone ? `<p class="hint"><b>Su iPhone:</b> prima tocca Condividi <b>⬆︎</b> → “Aggiungi alla schermata Home” e apri il calendario da lì (serve iOS 16.4 o successivo).</p>` : ''}
+      <ol class="steps"><li>Tocca <b>👥</b> in alto a destra.</li><li>In <b>Notifiche su questo telefono</b> scegli di chi è il telefono.</li><li>Premi <b>Attiva notifiche</b> e poi <b>Consenti</b>.</li><li>Quando crei un impegno, scegli in <b>🔔 Promemoria</b> quanto prima avvisare e a chi.</li></ol>
+      <label class="switch"><input type="checkbox" id="hintNever"> Non mostrare più su questo dispositivo</label>
+      <div class="actions" style="margin-top:14px"><button class="secondary" data-close>Più tardi</button><button class="primary" id="hintGo" style="flex:1">Attiva ora</button></div>`;
+    openSheet('hint');
+  }, 700);
+}
 // Sezione "Promemoria" della scheda impegno. notify.to non impostato = le persone dell'impegno
 let draftAnnounce = false;
 function notifySection(e){
@@ -763,7 +783,8 @@ function viewPeople(){
 /* ---------- sheet ---------- */
 let draft = null, draftOcc = null, sheetKind = null, saving = false;
 function openSheet(kind){ sheetKind = kind; $('#scrim').classList.add('open'); $('#sheet').classList.add('open'); setTimeout(()=>{ const f = $('#sheet [data-autofocus]'); if(f && kind==='event' && !draft.id && !draft.title) f.focus(); }, 60); }
-function closeSheet(){ $('#scrim').classList.remove('open'); $('#sheet').classList.remove('open'); sheetKind = null; draft = null; }
+function closeSheet(){ if(sheetKind === 'hint' && $('#hintNever')?.checked){ try{ localStorage.setItem(LS_HINT, '1'); }catch(e){} }
+  $('#scrim').classList.remove('open'); $('#sheet').classList.remove('open'); sheetKind = null; draft = null; }
 function refreshSheet(){ if(sheetKind === 'people') renderPeopleSheet(); }
 
 function openEditor(id, occ, pre){
@@ -1031,6 +1052,7 @@ sheet.addEventListener('click', e => {
     if(t.id === 'delOne') deleteOne();
     if(t.id === 'delAll') deleteAll();
   }
+  if(sheetKind === 'hint' && t.id === 'hintGo'){ closeSheet(); $('#btnPeople').onclick(); setTimeout(()=>$('.pushbox')?.scrollIntoView({behavior:'smooth', block:'start'}), 250); return; }
   if(sheetKind === 'people'){
     if(t.id === 'peopleToggle'){ peopleOpen = !peopleOpen; renderPeopleSheet(); return; }
     if(t.id === 'copyLink'){ copyLink(); return; }

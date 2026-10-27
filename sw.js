@@ -1,5 +1,5 @@
 // Tiene in cache l'app così si apre anche senza rete. I dati arrivano sempre dal foglio Google.
-const CACHE = 'famcal-v12';
+const CACHE = 'famcal-v13';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', e => {
@@ -14,6 +14,13 @@ self.addEventListener('fetch', e => {
       .then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return r; })
       .catch(() => caches.match(e.request).then(r => r || caches.match('./index.html')))
   );
+});
+
+// Tocco su una notifica mostrata dall'app aperta: porta in primo piano il calendario (quelle di Firebase le gestisce Firebase)
+self.addEventListener('notificationclick', e => {
+  if (e.notification.data && e.notification.data.FCM_MSG) return;
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cs => cs.length ? cs[0].focus() : self.clients.openWindow('./')));
 });
 
 // Notifiche: Firebase mostra da solo le notifiche ricevute ad app chiusa e al tocco apre il calendario.

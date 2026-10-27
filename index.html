@@ -235,7 +235,7 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 <div class="toast" id="toast" role="status"></div>
 <!-- VERSIONE: a ogni modifica aumentala insieme a CACHE in sw.js (stesso numero) -->
-<div class="ver" aria-hidden="true">v12</div>
+<div class="ver" aria-hidden="true">v13</div>
 
 <script>
 (function(){
@@ -494,8 +494,12 @@ async function fcm(){
   await loadScript(FB_SDK + 'firebase-app-compat.js'); await loadScript(FB_SDK + 'firebase-messaging-compat.js');
   if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
   messaging = firebase.messaging();
-  // con l'app aperta la notifica non compare da sola: la mostro come messaggio
-  messaging.onMessage(m => { const n = m.notification || {}; toast(`🔔 ${n.title || ''}${n.body ? ' · ' + n.body : ''}`); });
+  // con l'app aperta Firebase non mostra la notifica: la mostro io, uguale a quella ad app chiusa
+  messaging.onMessage(async m => {
+    const n = m.notification || {};
+    try{ (await navigator.serviceWorker.ready).showNotification(n.title || 'Calendario di famiglia', { body: n.body || '', icon: 'icon-192.png', tag: (m.data && m.data.tag) || undefined }); }
+    catch(e){ toast(`🔔 ${n.title || ''}${n.body ? ' · ' + n.body : ''}`); }
+  });
   return messaging;
 }
 async function pushToken(){ const m = await fcm(), reg = await navigator.serviceWorker.ready; return m.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: reg }); }

@@ -190,6 +190,10 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 .primary{border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;height:48px;padding:0 22px;border-radius:14px;flex:1}
 .danger{border:1.5px solid #C0392B;color:#C0392B;background:transparent;font-weight:700;height:44px;padding:0 14px;border-radius:12px}
 .secondary{border:1.5px solid var(--line);background:var(--surface);font-weight:600;height:48px;padding:0 18px;border-radius:14px}
+.ptoggle{width:100%;display:flex;align-items:center;gap:10px;justify-content:space-between;text-align:left;border:1.5px solid var(--line);background:var(--surface-2);border-radius:14px;padding:10px 12px;color:var(--ink)}
+.ptoggle .pchip{pointer-events:none}
+.ptoggle-lbl{font-weight:700;font-size:.88rem;color:var(--accent);white-space:nowrap}
+.pedit{margin-top:4px}
 .prow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
 .swatches{display:flex;gap:6px;flex-wrap:wrap;grid-column:1 / -1}
 .sw{width:28px;height:28px;border-radius:50%;border:3px solid transparent;background:var(--c)}
@@ -235,7 +239,7 @@ main{max-width:1180px;margin:0 auto;padding:16px 16px 120px}
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle"></div>
 <div class="toast" id="toast" role="status"></div>
 <!-- VERSIONE: a ogni modifica aumentala insieme a CACHE in sw.js (stesso numero) -->
-<div class="ver" aria-hidden="true">v13</div>
+<div class="ver" aria-hidden="true">v14</div>
 
 <script>
 (function(){
@@ -862,15 +866,20 @@ async function deleteAll(){
 }
 
 /* people sheet */
+let peopleOpen = false;   // elenco persone da modificare: chiuso di base
 function renderPeopleSheet(){
   const ro = !S.canWrite;
   $('#sheet').innerHTML = `<div class="grab"></div><h2 id="sheetTitle">Famiglia</h2>
-  ${S.people.map(p=>`<div class="prow" data-pid="${esc(p.id)}">
+  <button class="ptoggle" id="peopleToggle" aria-expanded="${peopleOpen}">
+    <span class="chips">${S.people.map(p=>`<span class="pchip" style="--c:${safeColor(p.color)}"><span class="dot">${initial(p.name)}</span>${esc(p.name)}</span>`).join('') || '<span class="hint">Nessuno ancora</span>'}</span>
+    <span class="ptoggle-lbl">${peopleOpen ? 'Chiudi ▴' : (ro ? 'Dettagli ▾' : 'Modifica ▾')}</span>
+  </button>
+  ${!peopleOpen ? '' : `<div class="pedit">${S.people.map(p=>`<div class="prow" data-pid="${esc(p.id)}">
     <input class="input" data-pname="${esc(p.id)}" autocomplete="off" value="${esc(p.name)}" maxlength="30" aria-label="Nome" ${ro?'disabled':''}>
     ${ro?'':`<button class="danger" data-pdel="${esc(p.id)}" aria-label="Rimuovi ${esc(p.name)}">Rimuovi</button>`}
     <div class="swatches">${COLORS.map(c=>`<button class="sw" style="--c:${c}" data-pcolor="${c}" data-for="${esc(p.id)}" aria-label="Colore" aria-pressed="${safeColor(p.color)===c}" ${ro?'disabled':''}></button>`).join('')}</div>
   </div>`).join('') || '<p class="hint">Nessuno ancora.</p>'}
-  ${ro?'':`<div class="row" style="margin-top:14px"><input class="input" id="newPerson" autocomplete="off" placeholder="Aggiungi una persona" maxlength="30" style="flex:1"><button class="primary" id="addPerson" style="flex:0">Aggiungi</button></div>`}
+  ${ro?'':`<div class="row" style="margin-top:14px"><input class="input" id="newPerson" autocomplete="off" placeholder="Aggiungi una persona" maxlength="30" style="flex:1"><button class="primary" id="addPerson" style="flex:0">Aggiungi</button></div>`}</div>`}
   ${ro ? '' : pushSection()}
   <p class="hint" style="margin-top:16px">Per condividere il calendario manda ai familiari l’indirizzo di questa pagina e la password. Sul telefono, dal menu del browser scegli “Installa app” o “Aggiungi a schermata Home”.</p>
   <button class="secondary" id="copyLink" style="width:100%;margin-top:10px">🔗 Copia il link da condividere</button>
@@ -926,7 +935,7 @@ $('#next').onclick = () => shift(1);
 $('#todayBtn').onclick = () => { S.anchor = today(); S.day = null; render(); };
 $('#fab').onclick = () => openEditor(null, null);
 $('#mic').onclick = voiceStart;
-$('#btnPeople').onclick = () => { pushSel = new Set(push.persons); renderPeopleSheet(); openSheet('people'); };
+$('#btnPeople').onclick = () => { pushSel = new Set(push.persons); peopleOpen = !S.people.length; renderPeopleSheet(); openSheet('people'); };
 $('#scrim').onclick = closeSheet;
 document.addEventListener('keydown', e => { if(e.key === 'Escape' && sheetKind) closeSheet(); });
 
@@ -1000,6 +1009,7 @@ sheet.addEventListener('click', e => {
     if(t.id === 'delAll') deleteAll();
   }
   if(sheetKind === 'people'){
+    if(t.id === 'peopleToggle'){ peopleOpen = !peopleOpen; renderPeopleSheet(); return; }
     if(t.id === 'copyLink'){ copyLink(); return; }
     if(t.dataset.pushp){ const id = t.dataset.pushp; pushSel.has(id) ? pushSel.delete(id) : pushSel.add(id); t.setAttribute('aria-pressed', pushSel.has(id)); if(push.token) pushPersons(); return; }
     if(t.id === 'pushOn'){ pushEnable(); return; }
